@@ -15,10 +15,12 @@
    - รองรับการแจ้ง 3 ประเภท: คน (PERSON), สัตว์เลี้ยง (PET), สิ่งของ (ITEM)
    - บันทึกข้อมูลสำคัญ: ชื่อ, ประเภท, วันที่หาย, รายละเอียด, สถานที่พบเห็นล่าสุด, เบอร์โทรติดต่อ, ลิงก์รูปภาพ
    - จัดการสถานะเคส: กำลังตามหา (LOST), พบแล้ว/ปิดเคส (FOUND)
+   - หน้าแสดงรายละเอียดเคส (Report Detail Page): แสดงข้อมูลครบถ้วน, ลิงก์เบอร์โทรศัพท์เพื่อโทรออกได้ทันที, ฟังก์ชันแก้ไขข้อมูล และฟังก์ชันลบเคส
 
 3. ระบบแจ้งเบาะแส (Clues / Tips)
-   - ผู้ใช้สามารถส่งข้อความเบาะแส สถานที่พบเห็น และรูปถ่ายยืนยัน
-   - ทุกคนสามารถดูเบาะแสที่เข้ามาช่วยตอบใต้แต่ละโพสต์ได้
+   - ผู้ใช้สามารถส่งข้อความเบาะแส สถานที่พบเห็น และรูปถ่ายหลักฐานยืนยัน
+   - ระบบป้องกันการส่งเบาะแสซ้ำหากเคสดังกล่าวปิดรับเบาะแสแล้ว (สถานะพบแล้ว)
+   - แสดงรายการเบาะแสเรียงตามเวลาล่าสุด พร้อมฟังก์ชันลบเบาะแส
 
 4. ระบบประวัติ (History)
    - ผู้ใช้สามารถตรวจสอบประวัติเบาะแสทั้งหมดที่ตนเองเคยส่งได้
@@ -34,9 +36,11 @@
 - TypeScript (Language)
 - Prisma ORM (Database ORM)
 - PostgreSQL / Supabase (Relational Database)
+- Zod (Request Validation & Schema Checking)
 
 ### Frontend
 - React 19
+- React Router v7 (Client-side Routing)
 - Vite (Build Tool & Dev Server)
 - Tailwind CSS v4 (Styling)
 - TanStack Query v5 (Data Fetching & Caching)
@@ -65,18 +69,31 @@ FindTheLost/
 ├── Frontend/
 │   ├── src/
 │   │   ├── components/
-│   │   │   ├── Navbar.tsx     # แถบเมนูด้านบนและช่องค้นหา
-│   │   │   ├── Sidebar.tsx    # เมนูด้านข้าง (Dashboard, My lost, History)
-│   │   │   ├── HeroBanner.tsx # แบนเนอร์แนะนำระบบและปุ่มแจ้งหาย
-│   │   │   ├── ReportCard.tsx # การ์ดแสดงรายการของหาย
-│   │   │   ├── ReportSection.tsx # แสดงรายการแยกหมวดหมู่และปุ่มแสดงเพิ่มเติม
-│   │   │   └── Dashboard.tsx  # หน้าหลักแดชบอร์ด
+│   │   │   ├── report/
+│   │   │   │   ├── ClueCard.tsx       # การ์ดแสดงข้อมูลเบาะแส
+│   │   │   │   ├── ClueForm.tsx       # ฟอร์มส่งเบาะแสใหม่
+│   │   │   │   ├── EditReportForm.tsx # ฟอร์มแก้ไขรายละเอียดเคส
+│   │   │   │   ├── ErrorNotice.tsx    # แจ้งเตือนข้อผิดพลาด
+│   │   │   │   ├── Photo.tsx          # แสดงผลรูปภาพพร้อม Placeholder
+│   │   │   │   └── utils.ts           # ฟังก์ชันจัดรูปแบบวันเวลาและสไตล์
+│   │   │   ├── Navbar.tsx             # แถบเมนูด้านบนและช่องค้นหา
+│   │   │   ├── Sidebar.tsx            # เมนูด้านข้าง (Dashboard, My Lost, History)
+│   │   │   ├── Layout.tsx             # โครงหน้าเว็บหลัก (Layout Wrapper)
+│   │   │   ├── HeroBanner.tsx         # แบนเนอร์แนะนำระบบและปุ่มแจ้งหาย
+│   │   │   ├── ReportCard.tsx         # การ์ดแสดงรายการของหายหน้าแรก
+│   │   │   ├── ReportSection.tsx      # ส่วนแสดงรายการแยกหมวดหมู่และปุ่มแสดงเพิ่มเติม
+│   │   │   ├── ReportDetailPage.tsx   # หน้ารายละเอียดเคสและรายการเบาะแส
+│   │   │   ├── Dashboard.tsx          # หน้าหลักแดชบอร์ด
+│   │   │   └── NotFoundPage.tsx       # หน้าแจ้งเตือนกรณีไม่พบ URL (404)
+│   │   ├── hooks/
+│   │   │   ├── useReportMutations.ts  # React Query Mutations สำหรับเคสและเบาะแส
+│   │   │   └── useUsers.ts            # Hook ดึงรายชื่อผู้ใช้
 │   │   ├── services/
-│   │   │   └── api.ts         # ฟังก์ชันเชื่อมต่อกับ Backend API
+│   │   │   └── api.ts                 # ฟังก์ชันเชื่อมต่อกับ Backend API
 │   │   ├── types/
-│   │   │   └── index.ts       # TypeScript Interfaces
-│   │   ├── App.tsx
-│   │   ├── main.tsx
+│   │   │   └── index.ts               # TypeScript Interfaces
+│   │   ├── App.tsx                    # กำหนดเส้นทาง URL (Routes)
+│   │   ├── main.tsx                   # จุดเริ่มต้นแอปและ Router Provider
 │   │   └── index.css
 │   ├── vite.config.ts
 │   └── package.json
@@ -149,8 +166,11 @@ FindTheLost/
 | GET | `/api/reports` | ดึงรายการแจ้งหายทั้งหมด (รองรับ Filter: `category`, `status`, `search`) |
 | GET | `/api/reports/:id` | ดึงรายละเอียดเคสพร้อมรายการเบาะแสทั้งหมด |
 | POST | `/api/reports` | บันทึกการแจ้งหายใหม่ |
+| PUT | `/api/reports/:id` | แก้ไขข้อมูลการแจ้งหาย |
 | PATCH | `/api/reports/:id/status` | อัปเดตสถานะของเคส (`LOST` หรือ `FOUND`) |
-| POST | `/api/clues` | ส่งเบาะแสให้กับเคส |
+| DELETE | `/api/reports/:id` | ลบรายการแจ้งหายพร้อมเบาะแสที่เกี่ยวข้อง |
+| POST | `/api/clues` | ส่งเบาะแสให้กับเคส (ตรวจสอบสถานะว่าปิดเคสแล้วหรือไม่) |
+| DELETE | `/api/clues/:id` | ลบข้อมูลเบาะแส |
 | GET | `/api/users/:userId/history` | ดึงประวัติเบาะแสและโพสต์ของผู้ใช้ |
 | POST | `/api/auth/register` | สมัครสมาชิกผู้ใช้ใหม่ |
 | POST | `/api/auth/login` | เข้าสู่ระบบ |
