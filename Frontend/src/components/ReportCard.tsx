@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router';
 import type { LostReport } from '../types';
 
 interface ReportCardProps {
@@ -23,8 +24,8 @@ export default function ReportCard({ report }: ReportCardProps) {
   };
 
   return (
-    <div
-      onClick={() => {}}
+    <Link
+      to={`/reports/${report.id}`}
       className="bg-[#fffffe] rounded-[24px] border border-black/30 p-2.5 flex flex-col transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5 cursor-pointer group"
     >
       {/* กล่องรูปภาพด้านบน (ตาม report box.png) */}
@@ -62,6 +63,6 @@ export default function ReportCard({ report }: ReportCardProps) {
           <span className="font-medium text-gray-700">วันแจ้งหาย:</span> {formatThaiDate(report.lostDate)}
         </p>
       </div>
-    </div>
+    </Link>
   );
 }

@@ -3,6 +3,7 @@ import cors from "cors";
 import dotenv from "dotenv";
 import { prisma } from "./lib/prisma.js";
 import { Category, ReportStatus } from "@prisma/client";
+import { z } from "zod";
 
 dotenv.config();
 
@@ -12,6 +13,55 @@ const PORT = process.env.PORT || 3000;
 // Middleware
 app.use(cors()); 
 app.use(express.json());
+
+// ---------- Helpers: validation & error handling ----------
+
+// แปลง :id จาก URL เป็นเลขจำนวนเต็มบวก (คืน null ถ้าไม่ถูกต้อง)
+function parseId(value: unknown): number | null {
+  const id = Number(value);
+  return Number.isInteger(id) && id > 0 ? id : null;
+}
+
+// ดึง error code ของ Prisma (เช่น P2025 = ไม่พบข้อมูล, P2003 = Foreign key ไม่ถูกต้อง)
+function prismaErrorCode(error: unknown): string | undefined {
+  if (typeof error === "object" && error !== null && "code" in error) {
+    const code = (error as { code: unknown }).code;
+    return typeof code === "string" ? code : undefined;
+  }
+  return undefined;
+}
+
+// รวมข้อความ error ของ zod ให้อ่านง่าย
+function formatZodError(error: z.ZodError): string[] {
+  return error.issues.map((i) => `${i.path.join(".") || "body"}: ${i.message}`);
+}
+
+const optionalUrl = z
+  .union([z.url({ message: "ต้องเป็น URL ที่ถูกต้อง" }), z.literal("")])
+  .nullish();
+
+// Schema สำหรับแก้ไขรายการแจ้งหาย (PUT = ส่งข้อมูลครบทุกฟิลด์)
+const updateReportSchema = z.object({
+  title: z.string().trim().min(1, "กรุณากรอกชื่อ").max(150, "ยาวเกิน 150 ตัวอักษร"),
+  category: z.enum(["PERSON", "PET", "ITEM"]),
+  lostDate: z.coerce.date({ message: "วันที่ไม่ถูกต้อง" }),
+  description: z.string().trim().min(1, "กรุณากรอกรายละเอียด").max(2000, "ยาวเกิน 2000 ตัวอักษร"),
+  lastSeenLocation: z.string().trim().min(1, "กรุณากรอกสถานที่").max(300, "ยาวเกิน 300 ตัวอักษร"),
+  contactTel: z
+    .string()
+    .trim()
+    .regex(/^[0-9+\-\s()]{6,20}$/, "เบอร์โทรไม่ถูกต้อง"),
+  imageUrl: optionalUrl,
+});
+
+// Schema สำหรับส่งเบาะแส
+const createClueSchema = z.object({
+  message: z.string().trim().min(1, "กรุณากรอกข้อความเบาะแส").max(1000, "ยาวเกิน 1000 ตัวอักษร"),
+  location: z.string().trim().max(300, "ยาวเกิน 300 ตัวอักษร").nullish(),
+  imageUrl: optionalUrl,
+  reportId: z.coerce.number().int().positive(),
+  userId: z.coerce.number().int().positive(),
+});
 
 // 1. Health Check Endpoint
 app.get("/", (_req: Request, res: Response) => {
@@ -77,8 +127,8 @@ app.get("/api/reports", async (req: Request, res: Response) => {
 // 2.2 ดึงรายละเอียดของรายการแจ้งหายตาม ID (รวมเบาะแสทั้งหมด)
 app.get("/api/reports/:id", async (req: Request, res: Response) => {
   try {
-    const id = Number(req.params.id);
-    if (isNaN(id)) {
+    const id = parseId(req.params.id);
+    if (id === null) {
       return res.status(400).json({ success: false, message: "ID ไม่ถูกต้อง" });
     }
 
@@ -165,10 +215,13 @@ app.post("/api/reports", async (req: Request, res: Response) => {
 // 2.4 อัปเดตสถานะ (เช่น LOST -> FOUND พบแล้ว หรือปิดเคส)
 app.patch("/api/reports/:id/status", async (req: Request, res: Response) => {
   try {
-    const id = Number(req.params.id);
-    const { status } = req.body;
+    const id = parseId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ success: false, message: "ID ไม่ถูกต้อง" });
+    }
 
-    if (!status || !Object.values(ReportStatus).includes(status.toUpperCase())) {
+    const status = typeof req.body?.status === "string" ? req.body.status.toUpperCase() : "";
+    if (!Object.values(ReportStatus).includes(status as ReportStatus)) {
       return res.status(400).json({
         success: false,
         message: "สถานะไม่ถูกต้อง (ต้องเป็น LOST หรือ FOUND)",
@@ -177,7 +230,7 @@ app.patch("/api/reports/:id/status", async (req: Request, res: Response) => {
 
     const updated = await prisma.lostReport.update({
       where: { id },
-      data: { status: status.toUpperCase() as ReportStatus },
+      data: { status: status as ReportStatus },
     });
 
     res.json({
@@ -186,8 +239,71 @@ app.patch("/api/reports/:id/status", async (req: Request, res: Response) => {
       data: updated,
     });
   } catch (error) {
+    if (prismaErrorCode(error) === "P2025") {
+      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลที่ระบุ" });
+    }
     console.error("Error updating status:", error);
     res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการอัปเดตสถานะ" });
+  }
+});
+
+// 2.5 แก้ไขข้อมูลรายการแจ้งหาย (PUT)
+app.put("/api/reports/:id", async (req: Request, res: Response) => {
+  try {
+    const id = parseId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ success: false, message: "ID ไม่ถูกต้อง" });
+    }
+
+    const parsed = updateReportSchema.safeParse(req.body);
+    if (!parsed.success) {
+      return res.status(400).json({
+        success: false,
+        message: "ข้อมูลไม่ถูกต้อง",
+        errors: formatZodError(parsed.error),
+      });
+    }
+    const body = parsed.data;
+
+    const updated = await prisma.lostReport.update({
+      where: { id },
+      data: {
+        title: body.title,
+        category: body.category as Category,
+        lostDate: body.lostDate,
+        description: body.description,
+        lastSeenLocation: body.lastSeenLocation,
+        contactTel: body.contactTel,
+        imageUrl: body.imageUrl || null,
+      },
+    });
+
+    res.json({ success: true, message: "แก้ไขรายการเรียบร้อยแล้ว", data: updated });
+  } catch (error) {
+    if (prismaErrorCode(error) === "P2025") {
+      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลที่ระบุ" });
+    }
+    console.error("Error updating report:", error);
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการแก้ไขรายการ" });
+  }
+});
+
+// 2.6 ลบรายการแจ้งหาย (เบาะแสที่เกี่ยวข้องถูกลบตาม onDelete: Cascade)
+app.delete("/api/reports/:id", async (req: Request, res: Response) => {
+  try {
+    const id = parseId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ success: false, message: "ID ไม่ถูกต้อง" });
+    }
+
+    await prisma.lostReport.delete({ where: { id } });
+    res.json({ success: true, message: "ลบรายการเรียบร้อยแล้ว" });
+  } catch (error) {
+    if (prismaErrorCode(error) === "P2025") {
+      return res.status(404).json({ success: false, message: "ไม่พบข้อมูลที่ระบุ" });
+    }
+    console.error("Error deleting report:", error);
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการลบรายการ" });
   }
 });
 
@@ -196,12 +312,28 @@ app.patch("/api/reports/:id/status", async (req: Request, res: Response) => {
 // 3.1 ส่งข้อมูลเบาะแสใหม่ให้กับเคส
 app.post("/api/clues", async (req: Request, res: Response) => {
   try {
-    const { message, imageUrl, location, reportId, userId } = req.body;
-
-    if (!message || !reportId || !userId) {
+    const parsed = createClueSchema.safeParse(req.body);
+    if (!parsed.success) {
       return res.status(400).json({
         success: false,
-        message: "กรุณาระบุข้อความเบาะแส (message), reportId, และ userId",
+        message: "ข้อมูลไม่ถูกต้อง",
+        errors: formatZodError(parsed.error),
+      });
+    }
+    const { message, imageUrl, location, reportId, userId } = parsed.data;
+
+    // เคสที่พบแล้วจะปิดรับเบาะแส (ต้องเปิดเคสอีกครั้งก่อนจึงจะส่งได้)
+    const targetReport = await prisma.lostReport.findUnique({
+      where: { id: reportId },
+      select: { status: true },
+    });
+    if (!targetReport) {
+      return res.status(404).json({ success: false, message: "ไม่พบรายการแจ้งหายที่ระบุ" });
+    }
+    if (targetReport.status === ReportStatus.FOUND) {
+      return res.status(409).json({
+        success: false,
+        message: "เคสนี้พบแล้ว จึงปิดรับเบาะแส",
       });
     }
 
@@ -210,8 +342,8 @@ app.post("/api/clues", async (req: Request, res: Response) => {
         message,
         imageUrl: imageUrl || null,
         location: location || null,
-        reportId: Number(reportId),
-        userId: Number(userId),
+        reportId,
+        userId,
       },
       include: {
         user: {
@@ -226,8 +358,31 @@ app.post("/api/clues", async (req: Request, res: Response) => {
       data: newClue,
     });
   } catch (error) {
+    // P2003 = reportId หรือ userId ไม่มีอยู่จริง (Foreign key constraint)
+    if (prismaErrorCode(error) === "P2003") {
+      return res.status(404).json({ success: false, message: "ไม่พบรายการแจ้งหายหรือผู้ใช้ที่ระบุ" });
+    }
     console.error("Error creating clue:", error);
     res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการบันทึกเบาะแส" });
+  }
+});
+
+// 3.2 ลบเบาะแส
+app.delete("/api/clues/:id", async (req: Request, res: Response) => {
+  try {
+    const id = parseId(req.params.id);
+    if (id === null) {
+      return res.status(400).json({ success: false, message: "ID ไม่ถูกต้อง" });
+    }
+
+    await prisma.clue.delete({ where: { id } });
+    res.json({ success: true, message: "ลบเบาะแสเรียบร้อยแล้ว" });
+  } catch (error) {
+    if (prismaErrorCode(error) === "P2025") {
+      return res.status(404).json({ success: false, message: "ไม่พบเบาะแสที่ระบุ" });
+    }
+    console.error("Error deleting clue:", error);
+    res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการลบเบาะแส" });
   }
 });
 
