@@ -658,7 +658,7 @@ async function main() {
       userId: kanya.id,
     },
   });
-
+  
   console.log("Seeding completed successfully!");
 }
 

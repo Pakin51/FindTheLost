@@ -4,6 +4,7 @@ import type {
   Clue,
   CreateClueInput,
   LostReport,
+  MyClue,
   ReportDetail,
   ReportStatus,
   UpdateReportInput,
@@ -97,6 +98,8 @@ export function deleteReport(id: number): Promise<void> {
   return request<void>(`/reports/${id}`, { method: 'DELETE' });
 }
 
+
+
 // ---------- Clues ----------
 
 export function createClue(input: CreateClueInput): Promise<Clue> {
@@ -114,4 +117,15 @@ export function deleteClue(id: number): Promise<void> {
 
 export function getUsers(): Promise<UserOption[]> {
   return request<UserOption[]>('/users');
+}
+
+
+interface UserHistory {
+  cluesHistory: MyClue[];
+  reportsHistory: LostReport[];
+}
+
+export async function getMyClues(userId: number): Promise<MyClue[]> {
+  const data = await request<UserHistory>(`/users/${userId}/history`);
+  return data.cluesHistory;
 }

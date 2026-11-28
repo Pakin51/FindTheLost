@@ -21,6 +21,7 @@ function useInvalidateReport(reportId: number) {
     Promise.all([
       queryClient.invalidateQueries({ queryKey: ['report', reportId] }),
       queryClient.invalidateQueries({ queryKey: ['reports'] }),
+      queryClient.invalidateQueries({ queryKey: ['my-clues'] }),
     ]);
 }
 
@@ -46,7 +47,11 @@ export function useDeleteReport(reportId: number) {
     mutationFn: () => deleteReport(reportId),
     // เฉพาะรายการ Dashboard ที่ต้อง refetch ส่วน cache ของหน้ารายละเอียด
     // ให้ component เป็นคนลบหลัง navigate ออกจากหน้านั้นแล้ว (กัน refetch แล้วเจอ 404)
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ['reports'] }),
+    onSuccess: () =>
+  Promise.all([
+    queryClient.invalidateQueries({ queryKey: ['reports'] }),
+    queryClient.invalidateQueries({ queryKey: ['my-clues'] }),
+  ]),
   });
 }
 
