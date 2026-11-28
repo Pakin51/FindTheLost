@@ -398,20 +398,24 @@ app.get("/api/users/:userId/history", async (req: Request, res: Response) => {
 
     // 1. เบาะแสที่ user คนนี้เคยไปแจ้งไว้
     const myClues = await prisma.clue.findMany({
-      where: { userId },
-      include: {
-        report: {
-          select: {
-            id: true,
-            title: true,
-            category: true,
-            status: true,
-            imageUrl: true,
-          },
-        },
+  where: {
+    userId,
+    report: { userId: { not: userId } }, // เฉพาะเคสของคนอื่น
+  },
+  include: {
+    report: {
+      select: {
+        id: true,
+        title: true,
+        category: true,
+        status: true,
+        imageUrl: true,
+        lastSeenLocation: true,
       },
-      orderBy: { createdAt: "desc" },
-    });
+    },
+  },
+  orderBy: { createdAt: "desc" },
+});
 
     // 2. โพสต์แจ้งหายที่ user คนนี้เป็นคนสร้าง
     const myReports = await prisma.lostReport.findMany({
@@ -434,6 +438,9 @@ app.get("/api/users/:userId/history", async (req: Request, res: Response) => {
     res.status(500).json({ success: false, message: "เกิดข้อผิดพลาดในการดึงข้อมูลประวัติ" });
   }
 });
+
+
+
 
 // 5. หมวด: ระบบผู้ใช้และการยืนยันตัวตน (Auth / Users)
 

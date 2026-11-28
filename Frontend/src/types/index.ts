@@ -79,3 +79,12 @@ export interface CreateClueInput {
   reportId: number;
   userId: number;
 }
+
+export interface MyClue {
+  id: number;
+  message: string;
+  imageUrl: string | null;
+  location: string | null;
+  createdAt: string;
+  report: Pick<LostReport, 'id' | 'title' | 'category' | 'status' | 'imageUrl' | 'lastSeenLocation'>;
+}
