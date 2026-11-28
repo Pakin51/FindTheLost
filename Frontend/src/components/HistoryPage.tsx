@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router';
+import { MapPin } from 'lucide-react';
 import { getMyClues } from '../services/api';
 import type { MyClue } from '../types';
 
@@ -7,7 +8,7 @@ const CATEGORY_LABEL = { PERSON: 'คนหาย', PET: 'สัตว์หา�
 const STATUS_LABEL = { LOST: 'กำลังตามหา', FOUND: 'พบแล้ว' } as const;
 
 // TODO: เปลี่ยนเป็น user ปัจจุบันของคุณ (จาก context / state ที่เก็บตอน login หรือ dropdown เลือก user)
-const CURRENT_USER_ID = 1;
+const CURRENT_USER_ID = 19;
 
 export default function HistoryPage() {
   const { data: clues = [], isLoading, isError } = useQuery<MyClue[]>({
@@ -46,7 +47,12 @@ export default function HistoryPage() {
               </div>
 
               <p className="mt-3 text-sm text-gray-700">{clue.message}</p>
-              {clue.location && <p className="mt-1 text-xs text-gray-500">📍 {clue.location}</p>}
+              {clue.location && (
+                <p className="mt-1 text-xs text-gray-500 inline-flex items-center gap-1">
+                  <MapPin className="w-3.5 h-3.5 text-gray-400 shrink-0" aria-hidden />
+                  <span>{clue.location}</span>
+                </p>
+              )}
               {clue.imageUrl && (
                 <img src={clue.imageUrl} alt="" className="mt-3 h-32 rounded-lg object-cover" />
               )}
